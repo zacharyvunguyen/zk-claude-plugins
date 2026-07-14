@@ -21,30 +21,36 @@ Update later with `/plugin marketplace update` then `/plugin install zk@zk-marke
 
 ### Plugin: `zk`
 
+The `zk` plugin is a personal **engineering-discipline (HOW) layer** — the pieces the `ak` kit doesn't cover as first-class disciplines. `ak` = WHAT to do; `zk` = HOW to do it well.
+
 | Skill | Purpose |
 |-------|---------|
-| `zk:tdd-ak` | ak-flavored test-driven-development discipline (Iron Law, Red→Green→Refactor, integrates `/ak:test` & `/ak:debug`, review-gate) |
+| `zk:tdd-ak` | Test-driven-development discipline (Iron Law, Red→Green→Refactor, integrates `/ak:test` & `/ak:debug`) |
+| `zk:verify-ak` | Verification-before-completion — no "done/fixed/passing" claim without running the check and showing real output |
+| `zk:receiving-review-ak` | Respond to code-review feedback with rigor (understand → verify → decide with a reason), not blind agreement |
 
-**Bundled hook:** a `Stop` hook (`tdd-gate.sh`) — the test-first guardrail. When a session leaves uncommitted CODE changes but no test file in the diff, it fires. Installed automatically with the plugin. It is:
+**Bundled gates (two `Stop` hooks, installed automatically):**
 
-- **Multi-language** — detects tests for JS/TS, Python, Go, Rust, Java/Kotlin, Ruby, PHP, C#, Elixir.
-- **Spike-aware** — skips throwaway branches (`spike/`, `proto/`, `wip/`, …).
-- **Safe** — degrades without `jq`; ignores docs/config; never blocks on non-code.
+- `tdd-gate.sh` — fires when a session leaves uncommitted CODE but **no test file** in the diff. Multi-language (JS/TS, Python, Go, Rust, Java/Kotlin, Ruby, PHP, C#, Elixir), spike-aware, degrades without `jq`.
+- `verify-gate.sh` — fires when a session leaves uncommitted CODE, nudging you to **show verification evidence** before claiming done.
+
+The two are complementary: tdd asks *"is there a test?"*, verify asks *"did you run it and show the output?"*, and the `ak` review-gate asks *"was it reviewed?"*.
 
 ## Configuration
 
-Tune the gate without editing files via `/plugin configure` (values reach the hook as env vars):
+Tune each gate via `/plugin configure` (values reach the hooks as env vars):
 
-| Option | Values | Default |
-|--------|--------|---------|
-| `mode` | `off` · `nudge` (block once/session) · `block` (block until a test appears) | `nudge` |
-| `spike_branches` | pipe-separated regex of skipped branch prefixes | `spike/\|proto/\|prototype/\|experiment/\|wip/\|scratch/\|throwaway/` |
-| `ignore_globs` | pipe-separated regex of changed paths to ignore | *(empty)* |
+| Option | Gate | Values | Default |
+|--------|------|--------|---------|
+| `mode` | tdd | `off` · `nudge` (once/session) · `block` | `nudge` |
+| `spike_branches` | tdd | pipe-separated regex of skipped branch prefixes | `spike/\|proto/\|…\|throwaway/` |
+| `ignore_globs` | tdd | pipe-separated regex of changed paths to ignore | *(empty)* |
+| `verify_mode` | verify | `off` · `nudge` (once/session) · `block` | `nudge` |
 
-Or per-project, drop a `.tdd-ak.json` in the repo root (overrides the global config):
+Or per-project, drop a `.tdd-ak.json` in the repo root (overrides global config):
 
 ```json
-{ "mode": "block", "spikeBranches": "spike/|throwaway/", "ignoreGlobs": "(^|/)generated/" }
+{ "mode": "block", "verifyMode": "nudge", "spikeBranches": "spike/|throwaway/", "ignoreGlobs": "(^|/)generated/" }
 ```
 
 ## Layout
@@ -54,12 +60,14 @@ Or per-project, drop a `.tdd-ak.json` in the repo root (overrides the global con
 CHANGELOG.md
 plugins/zk/
 ├── .claude-plugin/plugin.json      # plugin manifest (+ userConfig)
-├── skills/tdd-ak/                  # the skill
-│   ├── SKILL.md
-│   └── references/testing-anti-patterns.md
+├── skills/
+│   ├── tdd-ak/SKILL.md             # (+ references/testing-anti-patterns.md)
+│   ├── verify-ak/SKILL.md
+│   └── receiving-review-ak/SKILL.md
 ├── hooks/
-│   ├── hooks.json                  # registers the Stop hook
-│   └── tdd-gate.sh                 # configurable, multi-language gate
+│   ├── hooks.json                  # registers both Stop gates
+│   ├── tdd-gate.sh                 # configurable, multi-language
+│   └── verify-gate.sh              # evidence-before-claims
 └── evals/                          # claude plugin eval zk
 ```
 

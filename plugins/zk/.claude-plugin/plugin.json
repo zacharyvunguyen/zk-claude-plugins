@@ -1,7 +1,7 @@
 {
   "name": "zk",
-  "description": "Zachary's personal Claude Code skills — engineering disciplines invoked as zk:<skill>. Starts with tdd-ak (ak-flavored test-driven-development) plus a bundled, configurable Stop hook that enforces test-first.",
-  "version": "0.2.1",
+  "description": "Zachary's personal Claude Code engineering-discipline skills, invoked as zk:<skill> — the ak-flavored HOW layer: tdd-ak (test-first), verify-ak (evidence before claims), receiving-review-ak (respond to review with rigor). Ships configurable Stop-hook gates.",
+  "version": "0.3.0",
   "author": {
     "name": "Zachary Nguyen",
     "email": "zthevn@gmail.com"
@@ -34,6 +34,12 @@
       "title": "Ignore patterns",
       "description": "Pipe-separated extended-regex of changed paths to ignore when deciding whether tests are missing.",
       "default": ""
+    },
+    "verify_mode": {
+      "type": "string",
+      "title": "Verify gate mode",
+      "description": "How the verify-ak evidence-before-claims Stop hook behaves: off, nudge (once per session, default), or block.",
+      "default": "nudge"
     }
   }
 }

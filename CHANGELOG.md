@@ -2,6 +2,15 @@
 
 All notable changes to the `zk` plugin are documented here. Versions follow the `plugin.json` `version` field.
 
+## 0.3.0
+
+**Completes the zk discipline trio** (ak-flavored HOW layer). Adapted from `obra/superpowers`, only the disciplines the `ak` kit does not already cover.
+
+- **New `zk:verify-ak`** — verification-before-completion: no "done/fixed/passing" claim without running the real check and showing its output. Bundles a light `Stop` hook (`verify-gate.sh`, `verify_mode` = off|nudge|block, default nudge).
+- **New `zk:receiving-review-ak`** — respond to code-review feedback with rigor: understand → verify → decide with a reason, instead of blind agreement or blind refusal. Complements `/ak:code-review` (which *gives* reviews).
+- `verify-gate` uses its own config key (`verify_mode` / `.tdd-ak.json` `verifyMode`) so it tunes independently of the tdd gate.
+- Docs: README documents the trio and the two Stop gates.
+
 ## 0.2.1
 
 Fixes from self code-review of the gate:
