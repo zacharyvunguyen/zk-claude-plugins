@@ -1,46 +1,101 @@
 #!/usr/bin/env bash
-# tdd-gate.sh — Stop hook implementing the tdd-ak test-first discipline gate.
+# tdd-gate.sh (v2) — Stop hook enforcing the zk:tdd-ak test-first discipline.
 #
-# Loop-engineering principle: a "write the test first" rule as prose in CLAUDE.md
-# is NOT a guardrail. Only hooks enforce deterministically. This is that gate —
-# a nudge (not a hard block), modeled on review-gate.sh.
+# Loop-engineering principle: a "write the test first" rule as prose is NOT a
+# guardrail. Only hooks enforce deterministically. This is that gate.
 #
-# Behavior:
-#   - No-op outside a git repo.
-#   - No-op if the only uncommitted changes are docs/markdown/config-ish files.
-#   - No-op if ANY changed file looks like a test (assume TDD was followed).
-#   - When uncommitted CODE changed but NO test file changed, BLOCK the stop
-#     ONCE per session and tell Claude to follow tdd-ak (RED test first).
-#   - A per-session flag prevents looping.
+# What it does (once the model finishes responding / tries to stop):
+#   - Looks at uncommitted CHANGES in the repo.
+#   - If CODE changed but NO test file is among the changes, it acts per `mode`.
+#   - Multi-language test detection; skips docs/config; skips spike branches;
+#     honors per-project + global config; degrades gracefully without jq.
 #
-# Disable anytime via /hooks, or delete the Stop entry in ~/.claude/settings.json.
+# Modes:
+#   off    -> never fires
+#   nudge  -> blocks the stop ONCE per session, then allows (default)
+#   block  -> blocks every stop until a test appears or the repo opts out
+#
+# Config precedence (highest first):
+#   1. repo-root .tdd-ak.json  { "mode":"", "spikeBranches":"", "ignoreGlobs":"" }
+#   2. env from /plugin configure: CLAUDE_PLUGIN_OPTION_MODE / _SPIKE_BRANCHES / _IGNORE_GLOBS
+#   3. built-in defaults
+#
+# Exit 0 = allow stop. Print a JSON {"decision":"block",...} = block the stop.
+# Disable anytime via /plugin configure (mode=off), a repo .tdd-ak.json, or /hooks.
 
-input="$(cat 2>/dev/null)"
-sid="$(printf '%s' "$input" | jq -r '.session_id // "nosession"' 2>/dev/null)"
+set -u
+
+input="$(cat 2>/dev/null || true)"
+
+# --- session id (jq if present, else a portable sed fallback) ---
+sid=""
+if command -v jq >/dev/null 2>&1; then
+  sid="$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)"
+fi
+[ -z "$sid" ] && sid="$(printf '%s' "$input" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
 [ -z "$sid" ] && sid="nosession"
-flag="${TMPDIR:-/tmp}/claude-tdd-gate-${sid}"
 
-# Already nudged this session -> allow the stop.
-[ -f "$flag" ] && exit 0
+# --- config defaults, then env overrides ---
+mode="${CLAUDE_PLUGIN_OPTION_MODE:-nudge}"
+spike="${CLAUDE_PLUGIN_OPTION_SPIKE_BRANCHES:-spike/|proto/|prototype/|experiment/|wip/|scratch/|throwaway/}"
+ignore="${CLAUDE_PLUGIN_OPTION_IGNORE_GLOBS:-}"
 
-# Not a git repo -> nothing to gate.
+# --- repo-local override (.tdd-ak.json), if jq available ---
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+cfg="${repo_root:+$repo_root/.tdd-ak.json}"
+if [ -n "$cfg" ] && [ -f "$cfg" ] && command -v jq >/dev/null 2>&1; then
+  v="$(jq -r '.mode // empty' "$cfg" 2>/dev/null)";          [ -n "$v" ] && mode="$v"
+  v="$(jq -r '.spikeBranches // empty' "$cfg" 2>/dev/null)"; [ -n "$v" ] && spike="$v"
+  v="$(jq -r '.ignoreGlobs // empty' "$cfg" 2>/dev/null)";   [ -n "$v" ] && ignore="$v"
+fi
+
+# --- mode off -> never fire ---
+[ "$mode" = "off" ] && exit 0
+
+# --- not a git repo -> nothing to gate ---
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
-# Uncommitted files (staged + unstaged + untracked); strip the 2-char status + space.
-changed="$(git status --porcelain 2>/dev/null | cut -c4-)"
+# --- spike / prototype branch -> skip (TDD is optional for throwaways) ---
+branch="$(git branch --show-current 2>/dev/null || true)"
+if [ -n "$branch" ] && [ -n "$spike" ] && printf '%s' "$branch" | grep -qiE "$spike"; then
+  exit 0
+fi
+
+# --- session flag: nudge fires once; block keeps firing ---
+flag="${TMPDIR:-/tmp}/claude-tdd-gate-${sid}"
+if [ "$mode" = "nudge" ] && [ -f "$flag" ]; then
+  exit 0
+fi
+
+# --- collect uncommitted files (staged + unstaged + untracked) ---
+changed="$(git -c core.quotepath=false status --porcelain 2>/dev/null | cut -c4-)"
 [ -z "$changed" ] && exit 0
 
-# Keep only code (drop docs/markdown/text/license/gitignore/lock/config). If none -> no-op.
+# --- drop docs / config / lock / metadata; drop user-supplied ignore globs ---
 code="$(printf '%s\n' "$changed" \
-  | grep -viE '\.(md|mdx|markdown|txt|rst|adoc|json|ya?ml|toml|ini|cfg|lock)$' \
-  | grep -viE '(^|/)(docs?/|CHANGELOG|LICENSE|\.gitignore)')"
+  | grep -viE '\.(md|mdx|markdown|txt|rst|adoc|json|jsonc|ya?ml|toml|ini|cfg|conf|lock|env|properties)$' \
+  | grep -viE '(^|/)(docs?/|CHANGELOG|LICENSE|README|\.gitignore|\.editorconfig)')"
+if [ -n "$ignore" ]; then
+  # ignore is a pipe-separated list of extended-regex fragments
+  code="$(printf '%s\n' "$code" | grep -viE "$ignore" 2>/dev/null)"
+fi
 [ -z "$code" ] && exit 0
 
-# Did any changed file look like a test? If so, assume TDD was followed -> allow.
-tests="$(printf '%s\n' "$changed" \
-  | grep -iE '(^|/)(tests?|__tests__|spec|specs)/|(_test|_spec|\.test|\.spec|test_|Test)\.' )"
-[ -n "$tests" ] && exit 0
+# --- is any changed file a test? (multi-language) ---
+# JS/TS(.test/.spec,__tests__) · Python(test_*, *_test, tests/) · Go(*_test.go)
+# Rust(tests/, *_test.rs) · Java/Kotlin(*Test(s), src/test/) · Ruby(*_spec, spec/)
+# PHP(*Test.php, tests/) · C#(*Test(s).cs) · Elixir(*_test.exs, test/)
+test_re='(^|/)(tests?|specs?|__tests__)/|(_test|_tests|_spec|test_|tests_|\.test\.|\.spec\.)|(test|tests|spec|specs)\.[a-z0-9]+$'
+if printf '%s\n' "$changed" | grep -qiE "$test_re"; then
+  exit 0
+fi
 
-# Code changed, no test in the diff: nudge once this session.
-: > "$flag"
-printf '%s\n' '{"decision":"block","reason":"TDD gate (tdd-ak): this session changed CODE but no test file. If this was a feature/bugfix, you likely skipped test-first. Invoke the tdd-ak skill and confirm each behavior has a test that failed first (Verify RED). If tests genuinely do not apply (prototype, generated, config), say so and stop again — this gate fires once per session."}'
+# --- code changed, no test present: act per mode ---
+reason='TDD gate (zk:tdd-ak): this session changed CODE but no test file is in the diff. If this was a feature/bugfix you likely skipped test-first. Invoke the zk:tdd-ak skill and confirm each behavior has a test that FAILED first (Verify RED). Genuinely no test needed (prototype/generated/config)? Say so and stop again. Tune with /plugin configure (mode=off|nudge|block) or a repo .tdd-ak.json.'
+
+if [ "$mode" = "nudge" ]; then
+  : > "$flag" 2>/dev/null || true
+fi
+
+# reason is static (no quotes/newlines/backslashes) so this printf is safe JSON.
+printf '{"decision":"block","reason":"%s"}\n' "$reason"

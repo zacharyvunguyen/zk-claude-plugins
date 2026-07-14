@@ -137,6 +137,24 @@ Before marking work complete:
 
 Can't check every box? You skipped TDD. Start over.
 
+## Definition of Done (machine-checkable)
+
+Work is done only when, in the repo:
+
+1. `git status` shows a test file changed alongside every changed production file (or you explicitly declared the change test-exempt: prototype, generated, config).
+2. The test runner passes with a clean exit code and no warnings.
+3. For a bug fix, `git log`/diff shows the reproduction test was committed with (or before) the fix.
+
+The bundled `zk:tdd-ak` Stop hook enforces #1 mechanically — see "The Gate".
+
+## The Gate
+
+This skill ships a `Stop` hook (`tdd-gate.sh`) that fires when a session leaves uncommitted CODE with no test file in the diff. It is your safety net, not a substitute for the discipline.
+
+- **Modes:** `off` · `nudge` (default; blocks once/session) · `block` (blocks every stop until a test appears).
+- **Configure:** `/plugin configure` (global) or a repo-root `.tdd-ak.json` (per-project).
+- **Legit exception?** State why the change is test-exempt (prototype/generated/config), or set `mode=off` / add a spike-branch pattern. Do not silence the gate to skip real testing — that is the letter-vs-spirit violation.
+
 ## Anti-Patterns
 
 When adding mocks or test utilities, read [testing-anti-patterns.md](references/testing-anti-patterns.md) — testing the mock instead of real behavior, test-only production methods, and mocking without understanding dependencies.

@@ -1,7 +1,7 @@
 {
   "name": "zk",
-  "description": "Zachary's personal Claude Code skills — engineering disciplines invoked as zk:<skill>. Starts with tdd-ak (ak-flavored test-driven-development) plus a bundled Stop hook that enforces test-first.",
-  "version": "0.1.0",
+  "description": "Zachary's personal Claude Code skills — engineering disciplines invoked as zk:<skill>. Starts with tdd-ak (ak-flavored test-driven-development) plus a bundled, configurable Stop hook that enforces test-first.",
+  "version": "0.2.0",
   "author": {
     "name": "Zachary Nguyen"
   },
@@ -14,5 +14,25 @@
     "test-driven-development",
     "discipline",
     "ak"
-  ]
+  ],
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "TDD gate mode",
+      "description": "How the test-first Stop hook behaves: off (never fires), nudge (blocks once per session, default), or block (blocks every stop until a test appears).",
+      "default": "nudge"
+    },
+    "spike_branches": {
+      "type": "string",
+      "title": "Spike branch patterns",
+      "description": "Pipe-separated regex of branch prefixes where the gate is skipped (throwaway work).",
+      "default": "spike/|proto/|prototype/|experiment/|wip/|scratch/|throwaway/"
+    },
+    "ignore_globs": {
+      "type": "string",
+      "title": "Ignore patterns",
+      "description": "Pipe-separated extended-regex of changed paths to ignore when deciding whether tests are missing.",
+      "default": ""
+    }
+  }
 }
