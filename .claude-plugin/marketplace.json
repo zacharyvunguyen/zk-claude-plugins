@@ -5,12 +5,12 @@
   },
   "metadata": {
     "description": "Zachary's personal Claude Code plugin marketplace",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "zk",
-      "description": "Personal engineering-discipline skills invoked as zk:<skill> — tdd-ak, verify-ak, receiving-review-ak + configurable Stop-hook gates",
+      "description": "Personal engineering-discipline skills invoked as zk:<skill> — tdd-ak, verify-ak, design-verify-ak, receiving-review-ak + configurable Stop-hook gates",
       "source": "./plugins/zk",
       "strict": false
     }

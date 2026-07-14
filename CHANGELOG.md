@@ -2,6 +2,13 @@
 
 All notable changes to the `zk` plugin are documented here. Versions follow the `plugin.json` `version` field.
 
+## 0.4.0
+
+**Adds the frontend discipline.** The visual sibling of `verify-ak`.
+
+- **New `zk:design-verify-ak`** — visual-evidence-before-completion: no UI "looks good / done" claim without rendering the result, showing a screenshot/preview, and running an anti-AI-slop critique (deliberate palette/type vs the cream-serif-terracotta / black-acid-accent / broadsheet defaults) plus a quality floor (mobile width, visible focus, reduced-motion). Complements the `frontend-design` skill (which *designs*) and `/ak:code-review` (which reviews code).
+- **New `design-verify-gate.sh`** Stop hook — fires only when the diff touches UI files (`.tsx/.jsx/.vue/.svelte/.astro/.html/.css/.scss/.sass/.less/.styl`). `design_mode` = off|nudge|block, **default off** (opt-in per frontend project so it does not double-nudge with `verify-gate`, which already fires on any code). Configure via `/plugin configure` (`design_mode`) or a repo `.tdd-ak.json` (`designMode`).
+
 ## 0.3.0
 
 **Completes the zk discipline trio** (ak-flavored HOW layer). Adapted from `obra/superpowers`, only the disciplines the `ak` kit does not already cover.
