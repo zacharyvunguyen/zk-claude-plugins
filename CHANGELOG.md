@@ -2,6 +2,14 @@
 
 All notable changes to the `zk` plugin are documented here. Versions follow the `plugin.json` `version` field.
 
+## 0.2.1
+
+Fixes from self code-review of the gate:
+
+- **Test detection false-negative fixed**: production files ending in `test.<ext>`/`spec.<ext>` (e.g. `latest.js`, `contest.py`) were mistaken for test files, silencing the gate. Bare-name patterns are now anchored to a path boundary; PascalCase suffixes (`FooTest.java`) matched case-sensitively.
+- **Fail-safe mode**: an unknown/typo `mode` value now falls back to `nudge` instead of silently hard-blocking every stop.
+- Quieted stderr on a malformed `spike_branches` regex.
+
 ## 0.2.0
 
 **tdd-ak level-up.**

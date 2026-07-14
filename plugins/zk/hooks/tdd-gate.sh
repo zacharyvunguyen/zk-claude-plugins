@@ -49,6 +49,9 @@ if [ -n "$cfg" ] && [ -f "$cfg" ] && command -v jq >/dev/null 2>&1; then
   v="$(jq -r '.ignoreGlobs // empty' "$cfg" 2>/dev/null)";   [ -n "$v" ] && ignore="$v"
 fi
 
+# --- normalize mode: unknown/typo value fails safe to the least-disruptive 'nudge' ---
+case "$mode" in off|nudge|block) ;; *) mode="nudge" ;; esac
+
 # --- mode off -> never fire ---
 [ "$mode" = "off" ] && exit 0
 
@@ -57,7 +60,7 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 
 # --- spike / prototype branch -> skip (TDD is optional for throwaways) ---
 branch="$(git branch --show-current 2>/dev/null || true)"
-if [ -n "$branch" ] && [ -n "$spike" ] && printf '%s' "$branch" | grep -qiE "$spike"; then
+if [ -n "$branch" ] && [ -n "$spike" ] && printf '%s' "$branch" | grep -qiE "$spike" 2>/dev/null; then
   exit 0
 fi
 
@@ -83,12 +86,15 @@ fi
 
 # --- is any changed file a test? (multi-language) ---
 # JS/TS(.test/.spec,__tests__) · Python(test_*, *_test, tests/) · Go(*_test.go)
-# Rust(tests/, *_test.rs) · Java/Kotlin(*Test(s), src/test/) · Ruby(*_spec, spec/)
-# PHP(*Test.php, tests/) · C#(*Test(s).cs) · Elixir(*_test.exs, test/)
-test_re='(^|/)(tests?|specs?|__tests__)/|(_test|_tests|_spec|test_|tests_|\.test\.|\.spec\.)|(test|tests|spec|specs)\.[a-z0-9]+$'
-if printf '%s\n' "$changed" | grep -qiE "$test_re"; then
-  exit 0
-fi
+# Rust(tests/, *_test.rs) · Ruby(*_spec, spec/) · PHP(tests/) · Elixir(*_test.exs, test/)
+# Bare-name alternatives are anchored to a path boundary so "latest.js" / "contest.py"
+# (a production file that merely ENDS in "test.<ext>") is NOT mistaken for a test.
+ci_re='(^|/)(tests?|specs?|__tests__)/|(_test|_tests|_spec|test_|tests_|\.test\.|\.spec\.)|(^|/)(test|tests|spec|specs)\.[a-z0-9]+$'
+# PascalCase suffix (Java/Kotlin/C#: FooTest.java, FooSpec.kt) — case-sensitive so
+# lowercase "latest"/"contest" never match, but "Test"/"Spec" suffixes do.
+cs_re='(Test|Tests|Spec|Specs)\.[A-Za-z0-9]+$'
+if printf '%s\n' "$changed" | grep -qiE "$ci_re"; then exit 0; fi
+if printf '%s\n' "$changed" | grep -qE  "$cs_re"; then exit 0; fi
 
 # --- code changed, no test present: act per mode ---
 reason='TDD gate (zk:tdd-ak): this session changed CODE but no test file is in the diff. If this was a feature/bugfix you likely skipped test-first. Invoke the zk:tdd-ak skill and confirm each behavior has a test that FAILED first (Verify RED). Genuinely no test needed (prototype/generated/config)? Say so and stop again. Tune with /plugin configure (mode=off|nudge|block) or a repo .tdd-ak.json.'

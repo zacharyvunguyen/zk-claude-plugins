@@ -1,7 +1,7 @@
 {
   "name": "zk",
   "description": "Zachary's personal Claude Code skills — engineering disciplines invoked as zk:<skill>. Starts with tdd-ak (ak-flavored test-driven-development) plus a bundled, configurable Stop hook that enforces test-first.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "Zachary Nguyen"
   },
