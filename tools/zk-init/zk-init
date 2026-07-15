@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# zk-init — arm the zk discipline for THIS git repo by writing a validated
+# .tdd-ak.json at the repo root, so the zk Stop-gates (tdd / verify / design-verify)
+# enforce test-first + evidence-before-done + visual-evidence-for-UI.
+#
+# Simplified for full-stack repos: `zk-init` with NO args applies the everyday
+# full preset (block tdd, block verify, nudge design). Use `zk-init off` for scratch.
+# strict/frontend/proto/default are kept as aliases so older configs/muscle-memory work.
+# Safe by default: never clobbers a DIFFERENT existing config without --force (backs it up first).
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+zk-init — arm the zk discipline for THIS git repo (writes .tdd-ak.json at repo root)
+
+Usage: zk-init            # everyday: full preset (block tdd, block verify, nudge design)
+       zk-init off        # scratch/throwaway: turn everything off
+       zk-init show       # print the repo's current config
+       zk-init [preset] [--force]
+       zk-init -h | --help
+
+Presets:
+  full   (default)  mode=block, verifyMode=block, designMode=nudge   <- use this for ~everything
+  off               mode=off,   verifyMode=off,   designMode=off
+  aliases:          strict (block/block) · frontend (=full) · proto (=off) · default (nudge/nudge)
+
+Safety:
+  - Writes to the git repo root (git rev-parse --show-toplevel), not the CWD.
+  - Refuses to overwrite a DIFFERENT existing .tdd-ak.json unless --force.
+  - --force backs up the old file to .tdd-ak.json.bak-YYMMDD-HHMMSS first.
+EOF
+}
+
+# preset -> JSON (fixed literals: always valid JSON)
+preset_json() {
+  case "$1" in
+    full|frontend) printf '{"mode":"block","verifyMode":"block","designMode":"nudge"}' ;;
+    off|proto)     printf '{"mode":"off","verifyMode":"off","designMode":"off"}' ;;
+    strict)        printf '{"mode":"block","verifyMode":"block"}' ;;
+    default)       printf '{"mode":"nudge","verifyMode":"nudge"}' ;;
+    *) return 1 ;;
+  esac
+}
+
+main() {
+  case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+  local root cfg
+  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "zk-init: not a git repo (run inside one)" >&2; exit 1; }
+  cfg="$root/.tdd-ak.json"
+
+  if [ "${1:-}" = "show" ]; then
+    if [ -f "$cfg" ]; then echo "$cfg:"; cat "$cfg"; echo
+    else echo "no .tdd-ak.json at $root (global defaults apply: tdd=nudge, verify=nudge, design=off)"; fi
+    exit 0
+  fi
+
+  # resolve preset + force. No preset (or a bare --force) => the full-stack default.
+  local preset force
+  case "${1:-}" in
+    ""|--force) preset="full"; force="${1:-}" ;;
+    *)          preset="$1";   force="${2:-}" ;;
+  esac
+
+  local json
+  json="$(preset_json "$preset")" || {
+    echo "zk-init: unknown preset '$preset'" >&2; usage; exit 2; }
+
+  if [ -f "$cfg" ]; then
+    if [ "$(cat "$cfg")" = "$json" ]; then
+      echo "zk-init: $cfg already set to '$preset' — no change"; exit 0
+    fi
+    if [ "$force" != "--force" ]; then
+      echo "zk-init: $cfg exists and differs. Re-run with --force to overwrite (a backup will be made)." >&2
+      echo "current: $(cat "$cfg")" >&2
+      exit 3
+    fi
+    local bak="$cfg.bak-$(date +%y%m%d-%H%M%S)"
+    cp "$cfg" "$bak"; echo "zk-init: backed up existing config -> $bak"
+  fi
+
+  printf '%s\n' "$json" > "$cfg"
+  if command -v jq >/dev/null 2>&1; then
+    jq -e . "$cfg" >/dev/null || { echo "zk-init: wrote invalid JSON (unexpected)" >&2; exit 4; }
+  fi
+  echo "zk-init: applied '$preset' -> $cfg"
+  cat "$cfg"
+}
+
+main "$@"
